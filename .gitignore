@@ -1,0 +1,16 @@
+# Sistema
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Office (lock files do LibreOffice/Word/etc.)
+.~lock.*#
+~$*
+
+# Notas pessoais não destinadas ao repo
+rascunhos/

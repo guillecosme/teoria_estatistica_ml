@@ -217,6 +217,175 @@ Duas "cordas" no sino, em vez de uma. Sinaliza que existem duas subpopulações 
 
 ---
 
+## 4. Estatísticas descritivas
+
+**O que é.** Números que resumem uma coluna inteira em um valor só.
+
+### 4.1. Medidas de tendência central
+
+- **Média (aritmética):** soma de todos os valores ÷ quantidade. Sensível a outliers.
+- **Mediana:** valor do meio quando os dados estão ordenados. Robusta a outliers.
+- **Moda:** valor mais frequente. Útil para variáveis categóricas e discretas.
+
+**Analogia.** Você quer saber "quanto o brasileiro ganha".
+- Média: pega salário de todo mundo, soma e divide. Resultado puxado para cima por 1% de bilionários. Resposta: "R$ 4.500".
+- Mediana: você enfileira todos do mais pobre ao mais rico e pega o do meio. Resposta: "R$ 2.800".
+- A diferença entre média e mediana é o **viés de outlier**.
+
+**Matemática.**
+
+```
+Média:    x̄ = (Σ xᵢ) / n
+Mediana:  valor de posicao (n+1)/2 nos dados ordenados
+Moda:     argmax(frequencia(xᵢ))
+```
+
+Onde:
+- **x̄** (x-barra) = símbolo padrão para média de uma amostra
+- **xᵢ** = i-ésimo valor da amostra
+- **Σ** (sigma maiúsculo) = somatório (some todos os valores)
+- **n** = tamanho da amostra
+
+### 4.2. Medidas de dispersão
+
+- **Variância** (σ²): média dos quadrados das distâncias à média.
+- **Desvio-padrão** (σ): raiz da variância. Tem a mesma unidade da variável original (por isso é mais legível que variância).
+- **Amplitude:** valor máximo − valor mínimo.
+- **Intervalo interquartil (IQR):** Q3 − Q1, onde Q1 é o 25º percentil e Q3 é o 75º.
+
+**Matemática (variância amostral).**
+
+```
+σ² = (Σ (xᵢ − x̄)²) / (n − 1)
+```
+
+Onde:
+- **σ²** (sigma ao quadrado) = variância
+- **xᵢ − x̄** = distância de cada valor à média
+- **(...)²** = elevamos ao quadrado para que distâncias positivas e negativas não se anulem
+- **n − 1** = denominador (em vez de n) é a "correção de Bessel" para estimativa não-viesada da variância populacional a partir de uma amostra
+
+**Analogia.** Pense em peso de duas turmas. Turma A: todos pesam 70 kg. Turma B: metade pesa 50, metade pesa 90. Ambas têm média 70, mas a turma B tem variância muito maior. Desvio-padrão te diz "quão dispersos os dados estão da média".
+
+### 4.3. Percentis
+
+O percentil P é o valor abaixo do qual P% dos dados ficam. Mediana é o percentil 50. Quartis são percentis 25, 50 e 75.
+
+**No nosso projeto.** Em todos os histogramas de variáveis contínuas adicionamos `axvline(media, ...)` (regra explícita do projeto) para ancorar o leitor na média. No notebook 02, descrevemos cada coluna com `dados.describe()`, que retorna média, desvio-padrão, mín, Q1, mediana, Q3 e máx.
+
+**Snippet.**
+
+```python
+dados["nps_score"].describe()
+# count    2500.000000
+# mean        4.380000  <- media
+# std         3.123456  <- desvio-padrao
+# min         0.000000
+# 25%         1.800000  <- Q1
+# 50%         4.500000  <- mediana
+# 75%         6.900000  <- Q3
+# max        10.000000
+```
+
+**Cuidados.**
+- Use mediana quando a distribuição é assimétrica.
+- Variância tem unidade ao quadrado (R$², kg²) — sempre converta para desvio-padrão para comunicar.
+- O `.describe()` do pandas usa Q1=25% e Q3=75% por padrão.
+
+---
+
+## 5. Histograma, density plot e boxplot
+
+Três gráficos diferentes para mostrar a mesma coisa: como uma variável se distribui.
+
+### 5.1. Histograma
+
+**O que é.** Você divide a faixa de valores em "caixas" (bins) e conta quantas observações caíram em cada caixa. A altura da barra é a contagem.
+
+**Quando usar.** Sempre que quiser ver a forma da distribuição, identificar pico, assimetria, multi-modalidade.
+
+**Snippet.**
+
+```python
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.hist(dados["nps_score"], bins=22, edgecolor="white")
+ax.axvline(dados["nps_score"].mean(), color="black", linestyle=":",
+           label=f"média = {dados['nps_score'].mean():.2f}")
+ax.legend()
+```
+
+### 5.2. Density plot (KDE)
+
+**Acrônimo:** **KDE** = *Kernel Density Estimation* (estimativa de densidade por kernel).
+
+**O que é.** Versão "suavizada" do histograma. Em vez de barras, uma curva contínua. Útil para comparar distribuições de várias variáveis no mesmo gráfico.
+
+**Snippet.**
+
+```python
+sns.kdeplot(data=dados, x="nps_score", hue="customer_region")
+```
+
+### 5.3. Boxplot
+
+**O que é.** Caixa com 5 informações: mínimo, Q1, mediana, Q3, máximo. Pontos isolados além dos "bigodes" são outliers.
+
+**Componentes:**
+- **Caixa:** vai de Q1 até Q3 (50% centrais dos dados).
+- **Linha dentro da caixa:** mediana.
+- **Bigodes (whiskers):** estendem-se até 1,5 × IQR de cada lado.
+- **Pontos fora dos bigodes:** outliers.
+
+**Quando usar.** Comparar distribuições entre grupos. Ex.: NPS por categoria de cliente.
+
+**Snippet.**
+
+```python
+sns.boxplot(data=dados, x="categoria_nps", y="customer_service_contacts")
+```
+
+**Cuidados.**
+- Boxplot esconde o número de observações em cada grupo. Sempre confira `value_counts()` antes.
+- Histograma com poucos bins pode esconder estrutura; com muitos bins, vira ruído. A regra prática é começar com 20-30 bins.
+
+---
+
+## 6. Categóricas ordinais vs nominais
+
+**O que é.** Já vimos na seção 2, mas vale aprofundar porque define como você passa essas variáveis para um modelo.
+
+**Ordinal** tem ordem natural. Você pode dizer "X > Y" sem ofender ninguém: detrator < neutro < promotor.
+
+**Nominal** não tem ordem. Sul, Sudeste e Nordeste são só rótulos.
+
+**No nosso projeto.** Em `features.py`, definimos `categoria_nps` como ordinal e `customer_region` como nominal:
+
+```python
+# Ordinal
+dados["categoria_nps"] = pd.Categorical(
+    dados["categoria_nps"],
+    categories=["detrator", "neutro", "promotor"],
+    ordered=True,
+)
+
+# Nominal
+dados["customer_region"] = dados["customer_region"].astype("category")  # sem ordered=True
+```
+
+**Por que isso importa.**
+- Em ordinal, comparações `<` e `>` funcionam: `dados["categoria_nps"] >= "neutro"`.
+- Em regressão, ordinais podem ser tratados como numéricas (codificadas 0, 1, 2). Nominais precisam de **one-hot encoding** (ver seção 26).
+- Pandas `groupby` em ordinal preserva a ordem; em nominal usa ordem alfabética.
+
+---
+
+---
+
+# Parte II — Inferência estatística
+
 
 
 ---

@@ -386,6 +386,115 @@ dados["customer_region"] = dados["customer_region"].astype("category")  # sem or
 
 # Parte II — Inferência estatística
 
+## 7. Correlação de Pearson
+
+**O que é.** Número entre −1 e +1 que mede a **força e direção da associação linear** entre duas variáveis numéricas.
+
+- **+1:** quando uma sobe, a outra sobe na mesma proporção (relação linear perfeita positiva).
+- **0:** não há associação linear (mas pode haver não-linear!).
+- **−1:** quando uma sobe, a outra desce na mesma proporção (relação linear perfeita negativa).
+
+**Analogia.** Você anota seu peso e seu IMC todo mês. Os dois sobem juntos — correlação positiva alta. Você anota seu peso e o número da casa onde mora — correlação ~0, sem relação. Você anota dia da semana e quantos quilômetros pedalou no fim de semana: a tendência é Sex < Sáb > Dom — uma relação que existe, mas **não é linear**, então Pearson dá quase zero apesar de haver padrão.
+
+**Matemática.**
+
+```
+r = Σ((xᵢ − x̄)(yᵢ − ȳ)) / √(Σ(xᵢ − x̄)² × Σ(yᵢ − ȳ)²)
+```
+
+Onde:
+- **r** = coeficiente de correlação de Pearson
+- **xᵢ, yᵢ** = i-ésimos valores das duas variáveis
+- **x̄, ȳ** = médias das duas variáveis
+- **Numerador:** covariância (mede o quanto x e y "andam juntos")
+- **Denominador:** produto dos desvios-padrão (normaliza para a escala 0-1)
+
+A **covariância** sozinha não é interpretável (depende da unidade das variáveis). Pearson normaliza tudo numa escala universal.
+
+**No nosso projeto.** No notebook 04 (seção 4.2), calculamos correlação de Pearson de cada variável numérica com `nps_score`. O atraso na entrega liderou com r ≈ −0,597. O tempo total de entrega deu r ≈ +0,001 — Pearson não detectou nada porque a relação (se existir) é não-linear, motivando o teste de hipótese H1 com Welch.
+
+**Snippet.**
+
+```python
+correlacoes = dados.select_dtypes(include="number").corrwith(dados["nps_score"])
+correlacoes.sort_values()
+```
+
+**Cuidados.**
+- Pearson **só captura relação linear**. Se a relação for em U, exponencial ou ter ponto de ruptura, Pearson dá ~0 e te engana.
+- Pearson é sensível a outliers. Um único valor extremo pode mover a correlação muito.
+- Alternativa: correlação de **Spearman** (correlação por postos), que captura relações monotônicas mesmo não-lineares.
+
+---
+
+## 8. Causalidade vs correlação
+
+**O que é.** Correlação é associação estatística. Causalidade é "X faz Y acontecer".
+
+**Analogia.** Estatística clássica adora o exemplo: vendas de sorvete e afogamentos sobem juntos no verão. Pearson dá correlação positiva alta. Mas sorvete não causa afogamento — a causa comum é o calor, que aumenta as duas coisas independentemente. Isso se chama **variável de confusão** (confounder).
+
+**No nosso projeto.** Mesmo achando correlação forte entre `delivery_delay_days` e `nps_score`, isso não prova que atraso causa baixo NPS. Em tese, poderia haver uma variável escondida (ex.: clima ruim) afetando os dois. A EDA faz seu melhor — testa hipóteses, controla para variáveis de confusão (ex.: H7 testou se região é só proxy de operacional) — mas conclusão definitiva de causalidade exige experimento controlado (A/B test), que não temos.
+
+**Como sair do impasse.**
+- **A/B test:** sortear aleatoriamente quem entra na operação melhorada e comparar. Aleatoriedade quebra confundidores.
+- **Variáveis de controle:** rodar regressão multivariada incluindo possíveis confundidores e ver se o coeficiente da variável de interesse sobrevive.
+- **Análise de mediação:** testar se o efeito de X em Y passa por uma variável intermediária M.
+
+**Cuidados.**
+- "Correlation does not imply causation" é o mantra que toda apresentação para gestores precisa carregar.
+- Mas... falta de correlação **também** não prova falta de causalidade (relação pode ser não-linear).
+
+---
+
+## 9. População vs amostra
+
+**O que é.** Em estatística, todo dataset é uma **amostra** — um subconjunto — de uma **população** que você quer entender.
+
+- **População:** todos os pedidos que esse e-commerce já fez ou pode fazer.
+- **Amostra:** os 2.500 pedidos no nosso CSV.
+
+**Analogia.** Pesquisa eleitoral. Você não pergunta para 200 milhões de brasileiros — pergunta para 2.000. Esses 2.000 são a amostra; o eleitorado todo é a população. Dá para tirar conclusões sobre a população **se** a amostra for representativa.
+
+**No nosso projeto.** Os 2.500 pedidos são amostra de uma operação maior. Por isso usamos:
+- **Estatística descritiva** para resumir a amostra (média, desvio).
+- **Estatística inferencial** para extrapolar para a população (IC, p-valor, teste de hipótese).
+
+**Por que `n − 1` na fórmula da variância amostral.** Quando você calcula variância usando a média da amostra (que já foi estimada dos próprios dados), você "perde 1 grau de liberdade". Dividir por `n − 1` em vez de `n` corrige esse viés.
+
+**Cuidados.**
+- Amostra precisa ser **aleatória e representativa**. Se você só tem dados dos clientes que reclamaram, não dá para generalizar para "todos os clientes".
+- Tamanho importa: amostra de 30 traz muito mais incerteza que amostra de 2.500.
+
+---
+
+## 10. Lei dos Grandes Números e Teorema Central do Limite (TCL)
+
+> **Acrônimo:** **TCL** = Teorema Central do Limite (em inglês CLT — *Central Limit Theorem*).
+
+### Lei dos Grandes Números
+
+**O que é.** Conforme o tamanho da amostra cresce, a média amostral converge para a média populacional.
+
+**Analogia.** Você joga uma moeda 10 vezes e tira 7 caras. Estranho? Talvez. Joga 10.000 vezes e tira 5.013 caras. Bem mais perto de 50%. Quanto mais lances, mais a frequência observada se aproxima da probabilidade real.
+
+### Teorema Central do Limite
+
+**O que é.** Se você tira muitas amostras de qualquer distribuição (mesmo bizarra) e calcula a **média de cada amostra**, a distribuição dessas médias é aproximadamente **normal**, com:
+- Média igual à média populacional.
+- Desvio-padrão = σ_população / √n.
+
+**Por que isso é mágico.** Não importa se a variável original é normal, assimétrica ou multimodal — médias de amostras convergem para a normal. É isso que justifica usar testes baseados em distribuição normal (t, z) para qualquer dataset suficientemente grande.
+
+**No nosso projeto.** Usamos teste t de Welch (que pressupõe normalidade na média) sem nos preocupar muito com a normalidade do `nps_score` original (que é bem assimétrico) **porque** nossas amostras têm centenas de observações. TCL garante que a média amostral está perto da normal.
+
+**Regra prática.** Para a maioria das distribuições, n > 30 já é suficiente para o TCL valer "aproximadamente". Para distribuições muito bizarras, n > 100.
+
+**Cuidados.**
+- TCL fala da **distribuição da média**, não da distribuição original. Histograma do `nps_score` pode ser estranho — não importa para o teste t.
+- Não vale para amostras muito pequenas (n < 20).
+
+---
+
 
 
 ---

@@ -495,6 +495,87 @@ correlacoes.sort_values()
 
 ---
 
+## 11. Intervalo de confiança e p-valor
+
+> **Acrônimo:** **IC** = intervalo de confiança.
+
+### Intervalo de confiança
+
+**O que é.** Faixa numérica que provavelmente contém o "valor verdadeiro" do parâmetro populacional.
+
+**Analogia.** Pesquisa eleitoral diz "candidato A tem 35% das intenções, com margem de erro de 3 pontos para cima ou para baixo, com 95% de confiança". O IC é exatamente isso: estimativa pontual (35%) ± margem (3pp).
+
+**Matemática (IC para média, com TCL).**
+
+```
+IC95% = x̄ ± 1,96 × (s / √n)
+```
+
+Onde:
+- **x̄** = média da amostra
+- **s** = desvio-padrão da amostra
+- **n** = tamanho da amostra
+- **1,96** = quantil da distribuição normal padrão para 95% (2 caudas; para 99% seria 2,58)
+
+**Interpretação correta:** "Se eu repetisse esse experimento 100 vezes, em 95 delas o IC calculado conteria a média populacional verdadeira." É uma propriedade do **procedimento**, não do intervalo específico.
+
+**Interpretação errada (mas comum):** "Tem 95% de chance da média estar nesse intervalo." Tecnicamente errado em estatística frequentista, mas todo mundo fala assim.
+
+### p-valor
+
+**O que é.** A probabilidade de você observar uma diferença tão grande (ou maior) que a observada, **assumindo que a hipótese nula é verdadeira**.
+
+**Analogia.** Você joga uma moeda 10 vezes e tira 9 caras. p-valor é "qual a chance de tirar 9+ caras numa moeda honesta?". Se a chance for muito pequena (digamos, 1%), você desconfia que a moeda é viciada.
+
+- **p < 0,05:** evidência fraca contra a hipótese nula. Convencionalmente "rejeitamos" H0.
+- **p < 0,01:** evidência forte.
+- **p < 0,001:** evidência muito forte.
+- **p > 0,05:** não há evidência suficiente para rejeitar H0.
+
+**No nosso projeto.**
+- H1 (ponto de ruptura no tempo de entrega): teste t deu p = 0,77 → não rejeitamos H0 → hipótese rejeitada.
+- H5 (NPS prediz recompra): teste z deu p < 0,001 → rejeitamos H0 → hipótese confirmada com evidência muito forte.
+
+**Cuidados.**
+- p-valor **não é** "a probabilidade de a hipótese ser verdadeira". É a probabilidade dos dados observados, dada a hipótese.
+- p-valor é sensível ao tamanho da amostra. Com n = 1 milhão, qualquer diferença minúscula vira "estatisticamente significante" mesmo sem importância prática.
+- O limite 0,05 é convenção, não lei da natureza. Áreas críticas (medicina, física) usam 0,001 ou menos.
+
+---
+
+## 12. Erros Tipo I e Tipo II, alfa e poder
+
+**O que é.** Em todo teste de hipótese, você pode errar de duas formas:
+
+- **Erro Tipo I (falso positivo):** rejeitar H0 quando H0 é verdadeira. Você "vê" um efeito que não existe.
+- **Erro Tipo II (falso negativo):** não rejeitar H0 quando H0 é falsa. Você não detecta um efeito que existe.
+
+**Analogia médica.** Teste de doença:
+- H0: "paciente é saudável".
+- Erro Tipo I: alarme falso — diz que tá doente, mas tá saudável.
+- Erro Tipo II: doença passou despercebida — diz que tá saudável, mas tá doente.
+
+**Acrônimos:**
+- **α** (alfa) = probabilidade de cometer Erro Tipo I. Você define isso antes do teste (geralmente 0,05).
+- **β** (beta) = probabilidade de cometer Erro Tipo II.
+- **Poder estatístico** = 1 − β. Probabilidade de detectar um efeito real quando ele existe.
+
+**Conexão direta com matriz de confusão.** Erro Tipo I é o **falso positivo (FP)** da nossa classificação. Erro Tipo II é o **falso negativo (FN)**. Mesma ideia, mesma matemática.
+
+**Trade-off.** Reduzir α (ser mais conservador) aumenta β. Para reduzir os dois ao mesmo tempo, precisa **aumentar n** (tamanho da amostra).
+
+**No nosso projeto.** Usamos α = 0,05 implicitamente em todos os testes. Não calculamos poder explicitamente, mas com n = 2.500 nosso poder é alto para efeitos de tamanho médio.
+
+**Cuidados.**
+- Antes de fazer um teste, decida α. Mudar α depois de ver o p-valor é trapaça (p-hacking).
+- Se você faz muitos testes, a chance de um deles dar falso positivo cresce. Isso se chama **problema de comparações múltiplas** (correção de Bonferroni resolve).
+
+---
+
+---
+
+# Parte III — Testes de hipótese
+
 
 
 ---

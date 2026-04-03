@@ -576,6 +576,207 @@ Onde:
 
 # Parte III — Testes de hipótese
 
+## 13. Distribuição de Bernoulli e Binomial
+
+### Bernoulli
+
+**O que é.** Distribuição da variável binária mais simples possível: 0 ou 1, sucesso ou fracasso, com probabilidade p de sucesso.
+
+**Exemplos:** uma moeda (50% cara), um cliente (recompra ou não), um ticket (resolvido ou não).
+
+**Matemática.**
+
+```
+P(X = 1) = p
+P(X = 0) = 1 − p
+Média:     E[X] = p
+Variância: Var(X) = p(1 − p)
+```
+
+Onde:
+- **X** = a variável aleatória (0 ou 1)
+- **p** = probabilidade de sucesso
+- **E[X]** = valor esperado (média teórica)
+
+### Binomial
+
+**O que é.** Soma de n Bernoullis independentes. Conta quantos sucessos em n tentativas.
+
+**Exemplo.** Você joga uma moeda 10 vezes. Quantas caras saíram? Esse número segue uma distribuição binomial com n = 10 e p = 0,5.
+
+**Matemática.**
+
+```
+P(X = k) = C(n, k) × p^k × (1 − p)^(n−k)
+```
+
+Onde:
+- **k** = número de sucessos observados
+- **n** = número de tentativas
+- **p** = probabilidade de sucesso por tentativa
+- **C(n, k)** = "n escolhe k", o número de formas de escolher k itens em n (coeficiente binomial)
+- **Média:** E[X] = n × p
+- **Variância:** Var(X) = n × p × (1 − p)
+
+**No nosso projeto.** Toda variável binária (`eh_detrator`, `repeat_purchase_30d`) segue Bernoulli. O **número total** de detratores na base segue Binomial. Isso fundamenta os testes de proporção (seções 15 e 16).
+
+**Cuidados.**
+- Bernoulli pressupõe independência. Se um cliente influencia outro (efeito de rede), Bernoulli não se aplica direto.
+
+---
+
+## 14. Teste t de Welch
+
+**O que é.** Teste estatístico para comparar **médias de dois grupos** quando você não sabe se as variâncias são iguais.
+
+**Analogia.** Você quer saber se mulheres dão NPS médio diferente de homens. Mede média de cada grupo, calcula a diferença e pergunta: "essa diferença é grande o suficiente para não ser só sorte da amostra?".
+
+**Hipóteses do teste:**
+- **H0:** as duas médias são iguais (μ₁ = μ₂).
+- **H1:** as duas médias são diferentes (μ₁ ≠ μ₂) — teste bilateral.
+
+**Matemática.**
+
+```
+t = (x̄₁ − x̄₂) / √((s₁²/n₁) + (s₂²/n₂))
+```
+
+Onde:
+- **x̄₁, x̄₂** = médias dos dois grupos
+- **s₁², s₂²** = variâncias dos dois grupos
+- **n₁, n₂** = tamanhos dos grupos
+
+A estatística `t` segue uma distribuição t de Student com graus de liberdade aproximados pela fórmula de Welch-Satterthwaite (não precisa decorar).
+
+**Por que "Welch" e não "t-student padrão".** O t-student padrão pressupõe variâncias iguais. Welch relaxa essa premissa. Em 99% dos casos da vida real, use Welch — é mais robusto.
+
+**No nosso projeto.** Usamos Welch em H1 para comparar `nps_score` médio entre clientes com entrega rápida vs muito lenta:
+
+```python
+# repo/notebooks/04_eda.ipynb
+from scipy import stats
+grupo_rapido = dados.loc[dados["faixa_entrega"] == "rapida", "nps_score"]
+grupo_lento = dados.loc[dados["faixa_entrega"] == "muito_lenta", "nps_score"]
+estatistica, p_valor = stats.ttest_ind(grupo_rapido, grupo_lento, equal_var=False)
+# equal_var=False ativa o teste de Welch
+```
+
+Resultado: p ≈ 0,77 → não rejeitamos H0 → as duas faixas têm NPS médio iguais → hipótese H1 rejeitada.
+
+**Cuidados.**
+- Pressupõe TCL (médias dos grupos aproximadamente normais). Para n grande, OK.
+- Sensível a outliers (porque média é sensível). Se houver outliers extremos, considere Mann-Whitney (versão não-paramétrica).
+- Teste bilateral (`!=`) é o default. Para teste unilateral (`>` ou `<`), divida o p-valor por 2.
+
+---
+
+## 15. Intervalo de Wilson para proporções
+
+**O que é.** Intervalo de confiança específico para proporções (como porcentagem de detratores).
+
+**Por que não usar IC normal.** Para proporções, especialmente quando p é próximo de 0 ou 1, ou quando n é pequeno, o IC clássico baseado em distribuição normal dá resultados ruins (pode ir abaixo de 0 ou acima de 1, o que é absurdo). Wilson corrige isso.
+
+**Matemática (simplificada).** Não precisa decorar — `statsmodels` calcula. O importante é entender que Wilson:
+- Sempre fica dentro de [0, 1].
+- É mais preciso que IC normal para proporções extremas.
+- Continua simétrico em torno de uma versão "ajustada" da proporção observada.
+
+**No nosso projeto.** Usamos Wilson em várias hipóteses sobre proporções:
+
+```python
+from statsmodels.stats.proportion import proportion_confint
+
+# Proporcao de detratores entre clientes silenciosos
+n_silenciosos = (dados["customer_service_contacts"] == 0).sum()
+n_silenciosos_detratores = (
+    (dados["customer_service_contacts"] == 0) & (dados["categoria_nps"] == "detrator")
+).sum()
+
+low, high = proportion_confint(
+    count=n_silenciosos_detratores,
+    nobs=n_silenciosos,
+    alpha=0.05,
+    method="wilson",  # <- escolhe o metodo de Wilson
+)
+```
+
+**Cuidados.**
+- Para proporções no meio (0,3 a 0,7) com n grande, Wilson e IC normal dão resultados quase idênticos. Wilson brilha nas pontas.
+
+---
+
+## 16. Teste z de proporções
+
+**O que é.** Teste para comparar **duas proporções** (ex.: % de recompra entre detratores vs % entre promotores).
+
+**Hipóteses:**
+- **H0:** as duas proporções são iguais (p₁ = p₂).
+- **H1:** são diferentes.
+
+**Matemática (simplificada).**
+
+```
+z = (p̂₁ − p̂₂) / √(p̂(1 − p̂) × (1/n₁ + 1/n₂))
+```
+
+Onde:
+- **p̂₁, p̂₂** = proporções observadas (chapéu = "estimativa")
+- **p̂** = proporção combinada das duas amostras (assumindo H0 verdadeira)
+- **n₁, n₂** = tamanhos dos grupos
+
+A estatística `z` segue distribuição normal padrão (média 0, desvio 1).
+
+**No nosso projeto.** Usamos em H5 para comparar recompra entre detratores e promotores:
+
+```python
+from statsmodels.stats.proportion import proportions_ztest
+
+contagens = [
+    (dados["categoria_nps"] == "promotor") & (dados["repeat_purchase_30d"] == 1),
+    (dados["categoria_nps"] == "detrator") & (dados["repeat_purchase_30d"] == 1),
+]
+totais = [
+    (dados["categoria_nps"] == "promotor").sum(),
+    (dados["categoria_nps"] == "detrator").sum(),
+]
+estatistica, p_valor = proportions_ztest(
+    count=[c.sum() for c in contagens],
+    nobs=totais,
+)
+```
+
+Resultado: p < 0,001 → diferença gigante (0% vs 100%) → H5 confirmada.
+
+**Cuidados.**
+- Pressupõe que as duas amostras são independentes.
+- Para amostras pareadas (ex.: cliente antes/depois), use teste de McNemar.
+
+---
+
+## 17. Service Recovery Paradox (conceito de CX)
+
+> **Acrônimo:** **CX** = *Customer Experience* (experiência do cliente).
+
+**O que é.** Conceito de marketing/CX que diz: quando uma empresa **falha** com o cliente mas **recupera bem** (atende rápido, resolve, compensa), o cliente pode ficar **mais satisfeito** do que se nada tivesse dado errado.
+
+**Analogia.** Um restaurante esquece seu pedido. O gerente vem se desculpar, te dá um drink grátis e o prato fica pronto em 5 min. Você sai falando bem do lugar — talvez até melhor do que se a noite tivesse sido normal.
+
+**Por que importa.** Sugere que investir em SAC eficiente (reduzir tempo de resolução, treinar atendentes) compensa: você não evita falhas, mas converte a falha em oportunidade.
+
+**No nosso projeto.** Hipótese H3 testou esse conceito em duas versões:
+- **Versão forte:** "SAC rápido leva o detrator de volta ao patamar de quem nunca teve problema." → Rejeitada (p < 0,001, diferença +2,27 pontos de NPS entre quem não reclamou e quem reclamou+resolveu rápido).
+- **Versão atenuada:** "SAC rápido amortece o dano em mais de 1 ponto de NPS." → Confirmada (diferença de +1,27 pontos entre SAC rápido e SAC lento entre quem reclamou).
+
+**Cuidados.**
+- O paradoxo não vale para todas as falhas. Falhas críticas (acidente grave, dado vazado) raramente são compensadas por bom SAC.
+- Existe **viés de sobrevivência**: você só ouve de clientes que ficaram. Quem foi embora silenciosamente não fala.
+
+---
+
+---
+
+# Parte IV — Regressão linear
+
 
 
 ---

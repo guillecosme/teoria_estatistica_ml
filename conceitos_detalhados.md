@@ -777,6 +777,175 @@ Resultado: p < 0,001 → diferença gigante (0% vs 100%) → H5 confirmada.
 
 # Parte IV — Regressão linear
 
+## 18. Regressão linear simples — matemática completa
+
+**O que é.** Modelo que ajusta uma reta aos dados para descrever como uma variável (Y) varia em função de outra (X).
+
+**Equação.**
+
+```
+y = β₀ + β₁ × x + ε
+```
+
+Onde:
+- **y** = variável dependente (target, o que você quer prever)
+- **x** = variável independente (preditor, feature)
+- **β₀** (beta zero) = intercepto. Valor de y quando x = 0. Visualmente, onde a reta cruza o eixo y.
+- **β₁** (beta um) = coeficiente angular. Inclinação da reta. Diz quanto y muda quando x aumenta em 1 unidade.
+- **ε** (epsilon) = erro aleatório. A diferença entre o valor real e o valor predito pela reta. Em palavras: tudo que o modelo **não** explica.
+
+**Versão sem o erro** (depois de ajustado, para fazer previsão):
+
+```
+ŷ = β̂₀ + β̂₁ × x
+```
+
+O chapéu (^) indica "estimado". Valores estimados pelo modelo, não os "verdadeiros".
+
+**No nosso projeto.** No notebook 05, ajustamos:
+
+```
+nps_predito = 6,63 − 1,02 × delivery_delay_days
+```
+
+Onde:
+- **β̂₀ = 6,63**: cliente com zero atraso tem NPS predito de 6,63.
+- **β̂₁ = −1,02**: cada dia adicional de atraso derruba o NPS predito em 1,02 ponto.
+
+**Snippet.**
+
+```python
+# repo/notebooks/05_modelagem_regressao.ipynb
+import statsmodels.formula.api as smf
+modelo = smf.ols("nps_score ~ delivery_delay_days", data=dados_treino).fit()
+print(modelo.summary())
+# Coef        Std.Err      t       P>|t|    [0.025   0.975]
+# Intercept   6.6280       0.084   78.8    <0.001   6.463    6.793
+# delivery    -1.0240      0.039  -26.3    <0.001  -1.101   -0.947
+```
+
+**Cuidados.**
+- Regressão linear pressupõe **relação linear**. Se a relação real for curva, o modelo vai ser ruim.
+- O coeficiente diz a **inclinação média**, não que cada cliente individual obedeça a essa regra.
+- Mais sobre premissas na seção 21.
+
+---
+
+## 19. Mínimos quadrados ordinários (OLS)
+
+> **Acrônimo:** **OLS** = *Ordinary Least Squares* (mínimos quadrados ordinários).
+
+**O que é.** Método matemático que **encontra** os melhores valores de β₀ e β₁. O critério é: a reta que **minimiza a soma dos quadrados dos resíduos**.
+
+**Por que "quadrados".**
+1. Distâncias positivas (modelo errou para cima) e negativas (errou para baixo) se cancelariam se você só somasse. Elevar ao quadrado torna tudo positivo.
+2. O quadrado **penaliza erros grandes** mais do que erros pequenos. Errar 10 conta como 100, errar 1 conta como 1. Isso força a reta a evitar erros grandes.
+3. Existe solução fechada (analítica) usando cálculo: derivar e igualar a zero. Isso é raro em ML — quase todo modelo precisa de iteração numérica. OLS tem fórmula direta.
+
+**Matemática.**
+
+Minimizar:
+```
+Σ (yᵢ − ŷᵢ)² = Σ (yᵢ − (β₀ + β₁xᵢ))²
+```
+
+Derivando em relação a β₀ e β₁ e igualando a zero, chega-se a:
+
+```
+β̂₁ = Σ((xᵢ − x̄)(yᵢ − ȳ)) / Σ(xᵢ − x̄)²
+β̂₀ = ȳ − β̂₁ × x̄
+```
+
+Note que o numerador de β̂₁ é a covariância entre x e y; o denominador é a variância de x. Em palavras: **inclinação = covariância / variância**.
+
+**Analogia.** Imagine que você está jogando dardos numa parede e quer marcar o ponto onde "em média" os dardos caíram. Se você só somar as distâncias, dardos à direita anulam dardos à esquerda. Se você somar os **quadrados** das distâncias, todos contam, e o ponto que minimiza essa soma é o "centro de massa" dos dardos.
+
+**Cuidados.**
+- OLS é sensível a outliers (porque erros grandes elevados ao quadrado dominam a soma). Robust regression resolve.
+- Pressupõe erros independentes e com mesma variância (homocedasticidade — ver seção 25).
+
+---
+
+## 20. R², MAE, MSE, RMSE — métricas de regressão
+
+> **Acrônimos:**
+> - **R²** = coeficiente de determinação (não é sigla, mas vou explicar o "ao quadrado")
+> - **MAE** = *Mean Absolute Error* (erro médio absoluto)
+> - **MSE** = *Mean Squared Error* (erro quadrático médio)
+> - **RMSE** = *Root Mean Squared Error* (raiz do erro quadrático médio)
+
+### R²
+
+**O que mede.** Fração da variação da variável Y que o modelo consegue explicar. Vai de 0 (modelo não explica nada, igual chutar a média) a 1 (modelo explica tudo, perfeição irreal).
+
+**Matemática.**
+
+```
+R² = 1 − (SS_res / SS_tot)
+```
+
+Onde:
+- **SS_res** = *Sum of Squares Residual* (soma dos quadrados dos resíduos) = Σ(yᵢ − ŷᵢ)²
+- **SS_tot** = *Sum of Squares Total* (soma total dos quadrados) = Σ(yᵢ − ȳ)²
+- **ȳ** = média de y
+
+Em palavras: SS_tot mede a variação total; SS_res mede o que sobra depois do modelo. R² é a fração que **deixou** de sobrar.
+
+**O "ao quadrado".** Em regressão linear simples, R² é igual ao quadrado do coeficiente de correlação de Pearson entre x e y. Daí o nome.
+
+**No nosso projeto.** R² no teste = 0,40. Significa que `delivery_delay_days` explica 40% da variação do `nps_score`. Os outros 60% vêm de outras variáveis ou de aleatoriedade.
+
+### MAE
+
+**O que mede.** Erro médio em **unidade da variável** (no nosso caso, pontos de NPS).
+
+**Matemática.**
+
+```
+MAE = (1/n) × Σ |yᵢ − ŷᵢ|
+```
+
+Onde:
+- **|...|** = valor absoluto (positivo, sem sinal)
+- **n** = número de observações
+
+**Interpretação.** "Em média, o modelo erra X unidades."
+
+**No nosso projeto.** MAE no teste = 1,58. "Em média, o modelo erra 1,58 ponto de NPS."
+
+### MSE
+
+**O que mede.** Erro médio elevado ao quadrado.
+
+**Matemática.**
+
+```
+MSE = (1/n) × Σ (yᵢ − ŷᵢ)²
+```
+
+**Interpretação.** Não é diretamente interpretável (unidade ao quadrado), mas é o que OLS minimiza.
+
+### RMSE
+
+**O que mede.** Raiz quadrada do MSE — volta para unidade original.
+
+**Matemática.**
+
+```
+RMSE = √MSE
+```
+
+**Diferença para MAE.** RMSE penaliza mais erros grandes (porque eleva ao quadrado antes de tirar a raiz). Se você se importa especialmente com não errar feio em casos individuais, use RMSE. Se quer só o erro médio típico, use MAE.
+
+**No nosso projeto.** Reportamos R² e MAE. Não reportamos MSE/RMSE para evitar redundância (RMSE é parecido com MAE e R² já cobre o quadro geral).
+
+**Cuidados.**
+- R² infla com mais variáveis. **R² ajustado** corrige isso (penaliza por número de variáveis).
+- R² alto não significa modelo bom — pode ser overfitting.
+- MAE em unidade da variável é o que executivos entendem.
+
+---
+
 
 
 ---

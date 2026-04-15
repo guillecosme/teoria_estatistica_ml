@@ -946,6 +946,85 @@ RMSE = √MSE
 
 ---
 
+## 21. Resíduos e premissas da regressão linear
+
+**Resíduo.**
+
+```
+resíduo = y_real − y_predito = yᵢ − ŷᵢ
+```
+
+É a "sobra". O quanto o modelo errou em cada observação.
+
+**Por que olhar resíduos.** Se as premissas da regressão estão sendo respeitadas, os resíduos têm uma assinatura específica: aleatórios, sem padrão, com distribuição aproximadamente normal centrada em zero.
+
+**Premissas (em PT-BR claro).**
+
+1. **Linearidade.** A relação entre x e y é, de fato, linear. Se for curva, o modelo linear vai sistematicamente errar para cima em parte da curva e para baixo na outra parte — e isso aparece no gráfico de resíduos.
+
+2. **Independência dos erros.** Cada resíduo é independente do anterior. Isso falha em séries temporais (resíduo de hoje é parecido com o de ontem). Não temos timestamp no nosso dataset, então OK.
+
+3. **Erros do mesmo tamanho** (homocedasticidade — ver seção 25). A variância dos resíduos é constante ao longo do x.
+
+4. **Normalidade dos erros.** Os resíduos seguem distribuição normal centrada em zero. Necessária para os IC e p-valor dos coeficientes serem válidos. Pelo TCL, com n grande, essa premissa relaxa.
+
+**No nosso projeto.** No notebook 05 (seção 5.6), plotamos:
+- **Resíduos vs predito** (painel esquerdo): se vermos um padrão (cone, curva), tem problema. Vimos nuvem aleatória — OK.
+- **Q-Q plot dos resíduos** (painel direito, ver seção 22): se os pontos seguem a diagonal, resíduos são normais. Vimos pequeno desvio nas caudas, mas aceitável.
+
+**Snippet.**
+
+```python
+# repo/notebooks/05_modelagem_regressao.ipynb
+residuos = y_teste - y_pred_teste
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+# Painel 1: residuos vs predito
+axes[0].scatter(y_pred_teste, residuos, alpha=0.3)
+axes[0].axhline(0, color="red", linestyle="--")
+# Painel 2: Q-Q plot
+from scipy import stats
+stats.probplot(residuos, dist="norm", plot=axes[1])
+```
+
+**Cuidados.**
+- Resíduo médio sempre é zero por construção — não precisa testar.
+- Se as premissas falham, os coeficientes ainda fazem sentido (são estimativas), mas os IC e p-valor podem estar errados.
+
+---
+
+## 22. Q-Q plot
+
+**Acrônimo:** **Q-Q** = *Quantile-Quantile* (quantil-quantil).
+
+**O que é.** Gráfico que compara os quantis dos seus dados com os quantis de uma distribuição teórica (geralmente normal). Se os dados são normais, os pontos formam uma linha reta na diagonal.
+
+**Como funciona.**
+1. Ordene seus dados.
+2. Para cada ponto, calcule onde ele "deveria estar" se a distribuição fosse normal (quantil teórico).
+3. Plote (quantil teórico, valor real).
+4. Se reta = normal. Se curva = não normal.
+
+**Como ler.**
+- **Pontos na diagonal:** distribuição é normal. Tudo OK.
+- **Caudas para cima** (canto superior direito sobe acima da reta): cauda direita é mais pesada que normal — outliers à direita.
+- **Caudas para baixo** (canto inferior esquerdo desce abaixo da reta): cauda esquerda é mais pesada — outliers à esquerda.
+- **Curva em S:** distribuição mais "achatada" ou "pontuda" que normal.
+
+**Analogia.** Q-Q plot é tipo um espelho: se sua distribuição é normal, ela "encaixa" perfeitamente no espelho da normal. Onde os pontos saem da diagonal, sua distribuição é diferente.
+
+**No nosso projeto.** Usamos no notebook 05 para conferir normalidade dos resíduos da regressão. Pequeno desvio nas pontas (caudas um pouco mais pesadas) — aceitável dado n grande (TCL ajuda).
+
+**Snippet.**
+
+```python
+from scipy import stats
+fig, ax = plt.subplots()
+stats.probplot(residuos, dist="norm", plot=ax)
+ax.set_title("Q-Q plot dos resíduos")
+```
+
+---
+
 
 
 ---

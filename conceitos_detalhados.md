@@ -1025,6 +1025,191 @@ ax.set_title("Q-Q plot dos resíduos")
 
 ---
 
+## 23. Regressão com termo de interação
+
+**O que é.** Quando você suspeita que o efeito de uma variável **depende do valor de outra**, você adiciona um **termo de interação** ao modelo.
+
+**Equação sem interação:**
+```
+y = β₀ + β₁×x₁ + β₂×x₂ + ε
+```
+
+**Equação com interação:**
+```
+y = β₀ + β₁×x₁ + β₂×x₂ + β₃×(x₁×x₂) + ε
+```
+
+Onde:
+- **β₃** = coeficiente da interação. Se for diferente de zero (com p-valor pequeno), há efeito moderador.
+
+**Analogia.** Você suspeita que o efeito do exercício na perda de peso depende da idade da pessoa. Sem interação, o modelo diz "exercício reduz X kg, idade reduz Y kg, ponto". Com interação, ele diz "exercício reduz X kg, **mas em pessoas mais velhas reduz só X−algo**".
+
+**No nosso projeto.** H2 testou se a tolerância ao atraso depende do valor do pedido. A hipótese era: clientes com pedidos caros (ticket alto) seriam mais sensíveis a atraso. Em fórmula:
+
+```python
+# repo/notebooks/04_eda.ipynb
+modelo_com_interacao = smf.ols(
+    "nps_score ~ delivery_delay_days * order_value",
+    data=dados,
+).fit()
+# O '*' no statsmodels e' atalho para "x1 + x2 + x1*x2"
+```
+
+Resultado: coeficiente da interação com p = 0,58 → não rejeitamos H0 → atraso machuca todos igualmente, independente do ticket → H2 rejeitada.
+
+**Como ler o coeficiente.**
+
+```
+nps = β₀ + β₁×atraso + β₂×valor + β₃×(atraso × valor)
+    = β₀ + (β₁ + β₃×valor) × atraso + β₂×valor
+```
+
+Em palavras: o efeito do atraso sobre o NPS depende do valor — para cada R$1 a mais no pedido, o efeito do atraso muda em β₃.
+
+**Cuidados.**
+- Interpretar coeficientes na presença de interação é tricky. Sempre fixe uma das variáveis e veja o efeito da outra.
+- Não confunda interação com confundimento (variáveis correlacionadas).
+
+---
+
+## 24. Multicolinearidade
+
+**O que é.** Quando duas (ou mais) variáveis preditoras são fortemente correlacionadas entre si.
+
+**Por que é problema.**
+1. Os coeficientes individuais ficam **instáveis** — pequenas mudanças nos dados mudam muito as estimativas.
+2. Os p-valores ficam **inflados** — variáveis individualmente "deixam de ser significativas" mesmo sendo no conjunto.
+3. **Interpretação fica confusa** — você não sabe se o coeficiente representa o efeito da variável A ou da variável B.
+
+**Analogia.** Você tem dois preditores para previsão do tempo: temperatura em Celsius e temperatura em Fahrenheit. São praticamente a mesma variável transformada. O modelo não consegue distribuir o "crédito" entre as duas — pode dar +1 para Celsius e −0,5 para Fahrenheit, ou vice-versa, ambos "explicando" o mesmo sinal.
+
+**Como detectar.**
+- **VIF** (*Variance Inflation Factor*, fator de inflação da variância): se VIF > 10, há multicolinearidade séria.
+- **Matriz de correlação entre preditores**: se algum par tem |r| > 0,8, atenção.
+
+**No nosso projeto.** Não enfrentamos diretamente porque escolhemos modelo simples (1 preditor). Mas no modelo agregado do notebook 04 (10+ variáveis) seria importante checar.
+
+**Solução.** Remover uma das variáveis correlacionadas, ou combinar (PCA — *Principal Component Analysis*, análise de componentes principais).
+
+**Cuidados.**
+- Multicolinearidade **não afeta** a capacidade preditiva do modelo, só a interpretação dos coeficientes.
+- Se você só quer prever (não interpretar), pode até ignorar.
+
+---
+
+## 25. Heterocedasticidade e homocedasticidade
+
+**Acrônimos.** Vêm do grego: *homo* = igual, *hetero* = diferente, *skedastikós* = relativo à dispersão.
+
+- **Homocedasticidade** = variância dos erros constante ao longo do x. Em PT-BR claro: "erros do mesmo tamanho".
+- **Heterocedasticidade** = variância dos erros varia com x. Em PT-BR claro: "erros de tamanho diferente".
+
+**Analogia.** Você ajusta uma reta prevendo despesa em função da renda. Nas pessoas de baixa renda, a despesa varia pouco (todo mundo gasta parecido). Nas de alta renda, varia muito (uns gastam pouco, outros muito). O "tamanho" do erro do modelo depende do nível de renda — heterocedasticidade.
+
+**Por que é problema.** Os IC e p-valor dos coeficientes assumem homocedasticidade. Se não for o caso, eles ficam errados (geralmente IC mais estreito do que deveria ser).
+
+**Como detectar.**
+- **Visualmente:** gráfico de resíduos vs predito. Se vê um cone (estreito num lado, largo no outro), é hetero.
+- **Teste de Breusch-Pagan ou White:** versões formais.
+
+**Solução.**
+- **Erros robustos** (HC0, HC1, HC2, HC3 — opções no statsmodels): corrigem os IC sem mudar os coeficientes.
+- **Transformar y** (log, raiz): às vezes estabiliza a variância.
+
+**No nosso projeto.** Visualmente, o gráfico de resíduos no notebook 05 não mostrou cone — variância parece OK.
+
+---
+
+## 26. Encoding de variáveis categóricas (one-hot e dummies)
+
+**O que é.** Modelos de regressão só aceitam números. Variável categórica como `customer_region` (Sul, Sudeste, Nordeste) precisa virar números.
+
+### One-hot encoding
+
+Cria uma coluna binária para **cada categoria**. Para 3 regiões, vira 3 colunas:
+
+| customer_region | regiao_Sul | regiao_Sudeste | regiao_Nordeste |
+|---|---|---|---|
+| Sul | 1 | 0 | 0 |
+| Sudeste | 0 | 1 | 0 |
+| Nordeste | 0 | 0 | 1 |
+
+### Dummy encoding (regra n−1)
+
+Para regressão, você usa **n−1** colunas, não n. Uma das categorias vira **categoria de referência** (todas as colunas zero):
+
+| customer_region | regiao_Sudeste | regiao_Nordeste |
+|---|---|---|
+| Sul | 0 | 0 | ← referência (Sul é o "default")
+| Sudeste | 1 | 0 |
+| Nordeste | 0 | 1 |
+
+**Por que n−1.** Se você usar n colunas, há **multicolinearidade perfeita** (a soma das três colunas é sempre 1, replicando o intercepto). O modelo não consegue resolver. Removendo uma coluna, eliminou o problema.
+
+**Como ler os coeficientes.** Cada coeficiente diz "**quanto a média de y muda quando o cliente é dessa categoria, comparado à categoria de referência**".
+
+**No nosso projeto.** No notebook 04, modelo agregado:
+
+```python
+modelo = smf.ols(
+    "nps_score ~ delivery_delay_days + C(customer_region)",
+    data=dados,
+).fit()
+# C(...) diz ao statsmodels para tratar como categorica
+# Por padrao, ele faz dummy encoding com a primeira categoria como referencia
+```
+
+**Cuidados.**
+- Para árvores de decisão (Random Forest, XGBoost), você não precisa de one-hot — elas lidam direto com categóricas.
+- Se a variável é ordinal (detrator < neutro < promotor), pode usar codificação numérica direta (0, 1, 2).
+
+---
+
+## 27. Matriz de design (design matrix)
+
+**O que é.** A matriz X que statsmodels e sklearn constroem internamente para resolver a regressão.
+
+**Estrutura.** Cada linha é uma observação. Cada coluna é uma variável (incluindo intercepto, dummies, interações):
+
+```
+| 1 | atraso | valor | atraso × valor | regiao_Sudeste | regiao_Nordeste |
+|---|--------|-------|----------------|----------------|------------------|
+| 1 | 0      | 100   | 0              | 1              | 0                |
+| 1 | 3      | 250   | 750            | 0              | 1                |
+| 1 | 1      | 80    | 80             | 0              | 0                |
+```
+
+A primeira coluna de 1's é o intercepto. As outras são as variáveis preditoras (depois de aplicar one-hot, interações, etc.).
+
+**A solução OLS em forma matricial.**
+
+```
+β̂ = (XᵀX)⁻¹ Xᵀy
+```
+
+Onde:
+- **β̂** = vetor de coeficientes estimados
+- **X** = matriz de design
+- **Xᵀ** = transposta de X
+- **(XᵀX)⁻¹** = inversa de XᵀX
+- **y** = vetor da variável dependente
+
+Não precisa decorar. O importante: existe **uma fórmula fechada** que resolve OLS em uma operação matricial, daí ele ser tão rápido.
+
+**No nosso projeto.** Quando você escreve `smf.ols("y ~ x1 + x2", data=dados).fit()`, o statsmodels:
+1. Constrói a matriz X a partir da fórmula.
+2. Resolve a equação acima.
+3. Devolve β̂ e os erros padrão.
+
+**Cuidados.**
+- Se XᵀX não for inversível (quando há colinearidade perfeita), o método quebra. É por isso que a regra n−1 do dummy encoding existe.
+
+---
+
+---
+
+# Parte V — Classificação
+
 
 
 ---

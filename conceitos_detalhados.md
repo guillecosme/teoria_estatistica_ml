@@ -1210,6 +1210,224 @@ Não precisa decorar. O importante: existe **uma fórmula fechada** que resolve 
 
 # Parte V — Classificação
 
+## 28. Classificação binária e threshold
+
+**O que é.** Problema onde a target tem só 2 valores (0/1, sim/não, detrator/não-detrator). O modelo prevê a probabilidade ou um score, e um **threshold** transforma esse número em decisão binária.
+
+**Analogia.** Detector de spam. O modelo dá uma probabilidade de "isto é spam": 0,1 (provavelmente não), 0,9 (provavelmente sim). Você define um corte (threshold = 0,5): acima vira spam, abaixo vira inbox.
+
+**No nosso projeto.** No notebook 06, transformamos a regressão em classificador:
+
+```python
+threshold = 6.0
+y_pred_det = (nps_predito_teste < threshold).astype(int)
+# 1 = predito detrator, 0 = predito nao-detrator
+```
+
+**Por que escolher threshold é decisão de produto, não técnica.**
+
+- Threshold baixo → poucos clientes apontados → alta precisão, baixo recall → você só age nos casos óbvios.
+- Threshold alto → muitos clientes apontados → baixa precisão, alto recall → você ataca todo mundo, gastando recurso em alarmes falsos.
+
+A escolha depende de **custo dos dois tipos de erro** no negócio.
+
+**Cuidados.**
+- Threshold "default" 0,5 (ou no nosso caso, 7) é raramente o melhor. Sempre faça varredura.
+- Em datasets desbalanceados (como o nosso, 84% detratores), threshold default pode dar resultado degenerado (ver notebook 06, seção 6.4).
+
+---
+
+## 29. Matriz de confusão
+
+**O que é.** Tabela 2×2 que mostra os 4 possíveis resultados de um classificador binário.
+
+```
+                  | Predito: Detrator | Predito: Não-detrator |
+Real: Detrator    |        TP         |          FN           |
+Real: Não-detrator|        FP         |          TN           |
+```
+
+Onde:
+- **TP** = *True Positive* (verdadeiro positivo): real detrator, predito detrator. Acerto.
+- **TN** = *True Negative* (verdadeiro negativo): real não-detrator, predito não-detrator. Acerto.
+- **FP** = *False Positive* (falso positivo): real não-detrator, predito detrator. Alarme falso. Erro Tipo I.
+- **FN** = *False Negative* (falso negativo): real detrator, predito não-detrator. Detrator perdido. Erro Tipo II.
+
+**Analogia médica.** Teste de gravidez:
+- TP: grávida e teste positivo. ✓
+- TN: não grávida e teste negativo. ✓
+- FP: não grávida e teste positivo. Susto.
+- FN: grávida e teste negativo. Bebê surpresa daqui 9 meses.
+
+**No nosso projeto.** Threshold 6,0 produziu:
+- TP = 392 (detratores capturados)
+- FP = 46 (alarmes falsos)
+- FN = 35 (detratores perdidos)
+- TN = 27 (não-detratores corretamente liberados)
+
+**Cuidados.**
+- A convenção de qual classe é "positivo" muda entre projetos. No nosso, "positivo" é detrator (a classe que queremos pegar). Em medicina, "positivo" é a doença.
+- A matriz de confusão mostra o **balanço** de erros, não só o acerto total.
+
+---
+
+## 30. Acurácia, precisão, recall, F1
+
+Cada métrica responde uma **pergunta de negócio diferente**.
+
+### Acurácia
+
+**Pergunta:** "De todas as previsões, quantas estão certas?"
+
+```
+Acurácia = (TP + TN) / (TP + TN + FP + FN)
+```
+
+**Quando engana.** Em dataset desbalanceado. Se 99% dos clientes são "saudáveis" e 1% têm doença, modelo trivial "saudável para todos" tem 99% de acurácia, mas é inútil.
+
+### Precisão (precision)
+
+**Pergunta:** "Dos que apontei como detrator, quantos eram detrator de verdade?"
+
+```
+Precisão = TP / (TP + FP)
+```
+
+**Mnemônico.** "Quão preciso é o meu alvo?" Alta precisão = pouco alarme falso.
+
+**Use quando:** alarme falso é caro (acionar SAC custa tempo, dinheiro, irritação).
+
+### Recall (sensibilidade)
+
+**Pergunta:** "Dos detratores reais, quantos eu peguei?"
+
+```
+Recall = TP / (TP + FN)
+```
+
+**Mnemônico.** "Quanto eu lembro de pegar?" Alto recall = poucos detratores perdidos.
+
+**Use quando:** detrator perdido é caro (cliente que reclama nas redes, churn).
+
+### F1
+
+**Pergunta:** "Tem como combinar precisão e recall num número só?"
+
+```
+F1 = 2 × (Precisão × Recall) / (Precisão + Recall)
+```
+
+**Por que harmônica e não aritmética.** Média harmônica pune valores extremos. Se precisão = 1,0 e recall = 0,1, a aritmética seria 0,55 (parece bom). A harmônica é 0,18 (revela que tem algo errado). F1 só fica alto quando **as duas** são altas.
+
+**No nosso projeto.** Threshold 6,0:
+- Acurácia = 83,8% (parece OK, mas baseline trivial é 85,4%, então cuidado)
+- Precisão = 89,5% (dos preditos detratores, ~9 em 10 acertou)
+- Recall = 91,8% (dos detratores reais, ~9 em 10 capturei)
+- F1 = 0,906 (alta combinação)
+
+**Cuidados.**
+- F1 dá mesmo peso para precisão e recall. Se você se importa mais com um deles, use **F-beta** (Fβ).
+- Em problemas multiclasse, precisão/recall/F1 podem ser calculados por classe ou agregados (macro, micro, weighted).
+
+---
+
+## 31. Curva ROC e AUC (bônus)
+
+> **Acrônimos.**
+> - **ROC** = *Receiver Operating Characteristic* (característica de operação do receptor — vem de radar militar de WWII)
+> - **AUC** = *Area Under the Curve* (área sob a curva — geralmente sob a ROC)
+> - **TPR** = *True Positive Rate* = Recall = TP / (TP + FN)
+> - **FPR** = *False Positive Rate* = FP / (FP + TN)
+
+**O que é.** Gráfico que mostra **TPR vs FPR** para todos os thresholds possíveis. Cada ponto é uma escolha de threshold.
+
+- **Diagonal (45°):** classificador aleatório.
+- **Canto superior esquerdo:** classificador perfeito (TPR=1, FPR=0).
+- **Curva abaulada para o canto:** quanto mais perto do canto, melhor.
+
+**AUC.** Área sob a ROC. Vai de 0,5 (aleatório) a 1,0 (perfeito).
+- AUC = 0,5: chute.
+- AUC = 0,7: razoável.
+- AUC = 0,9+: muito bom.
+
+**Por que NÃO usamos no projeto.** Optamos pela varredura simples de threshold (notebook 06, seção 6.5) por dois motivos:
+1. Caía direto no que a aula cobriu (precisão/recall/F1 explícitos).
+2. Para o storytelling executivo, "F1 = 0,906" comunica melhor que "AUC = 0,87".
+
+**Quando usar ROC/AUC.**
+- Quando você quer comparar dois classificadores de forma agnóstica ao threshold.
+- Em datasets relativamente balanceados.
+- Em datasets muito desbalanceados, **precision-recall curve** é mais informativa que ROC (vide artigo Saito 2015 nas referências).
+
+---
+
+## 32. Por que não regressão logística
+
+**O que é regressão logística.** Modelo que prevê **probabilidade** de uma classe binária diretamente, usando função sigmoide:
+
+```
+P(y = 1 | x) = 1 / (1 + e^(−(β₀ + β₁×x)))
+```
+
+A saída fica sempre entre 0 e 1, naturalmente.
+
+**Por que não usamos.**
+1. A aula da Fase 1 não cobriu logística. Usá-la sem ter visto seria queimar etapas.
+2. Para o problema atual (uma variável dominante, target derivada de escala contínua), a regressão linear simples + threshold dá resultado equivalente a logística com complexidade muito menor.
+3. Princípio de **parcimônia**: o modelo mais simples que resolve é o melhor.
+
+**Quando você deveria preferir logística.**
+- Quando precisa de probabilidades calibradas (ex.: "este cliente tem 73% de chance de virar detrator").
+- Quando há múltiplas variáveis preditoras com efeitos não-lineares mas a target é binária.
+- Quando vai integrar com outros modelos que esperam probabilidades.
+
+**Cuidados.**
+- Regressão linear pode dar valores fora de [0, 1] se interpretar como probabilidade. No nosso caso, isso não é problema porque interpretamos como NPS predito (0-10), não probabilidade.
+
+---
+
+## 33. Discretização (binning)
+
+**O que é.** Transformar uma variável contínua em categórica, agrupando valores em faixas.
+
+**No nosso projeto.** Usamos em vários lugares:
+
+```python
+# Categorizar nps_score em detrator/neutro/promotor
+dados["categoria_nps"] = pd.cut(
+    dados["nps_score"],
+    bins=[-float("inf"), 7, 9, float("inf")],
+    labels=["detrator", "neutro", "promotor"],
+    right=False,
+)
+
+# Faixas de atraso para análise (notebook 05, secao 5.7)
+faixa_atraso = pd.cut(
+    dados["delivery_delay_days"],
+    bins=[-0.5, 0.5, 2.5, 4.5, 100],
+    labels=["Sem atraso (0d)", "Atraso leve (1-2d)", "Atraso moderado (3-4d)", "Atraso severo (5+d)"],
+)
+```
+
+**Quando ajuda.**
+- Quando o relacionamento com a target tem ponto de ruptura claro (a NPS canon é um exemplo).
+- Quando o público da apresentação entende melhor faixas que números contínuos.
+- Quando você quer reduzir efeito de outliers.
+
+**Quando atrapalha.**
+- Você **destrói informação** ao binar. Cliente com atraso de 2,1 dias e cliente com atraso de 0,9 dias viram a mesma "faixa leve", mas a diferença é real.
+- Reduz capacidade preditiva do modelo.
+
+**Regra prática.**
+- Para análise descritiva e apresentação: bina.
+- Para modelagem preditiva: mantém contínuo, deixa o modelo descobrir os cortes.
+
+---
+
+---
+
+# Parte VI — Boas práticas de ML
+
 
 
 ---

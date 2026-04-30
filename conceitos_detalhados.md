@@ -1428,6 +1428,208 @@ faixa_atraso = pd.cut(
 
 # Parte VI — Boas práticas de ML
 
+## 34. Train/test split
+
+**O que é.** Separar o dataset em duas partes:
+- **Treino:** usado para o modelo "aprender" (ajustar coeficientes).
+- **Teste:** usado para avaliar como o modelo se sai em dados que ele **nunca viu**.
+
+**Analogia.** Estudar para a prova. Se você decora todas as questões da lista de exercícios e só faz essas, sabe responder "perfeitamente" ela. Mas na prova de verdade aparecem questões diferentes — e o seu desempenho real só se mede ali.
+
+**Por que separar.** Se você avalia o modelo nos mesmos dados que usou para treinar, está dando uma "avaliação inflada" — o modelo aprendeu **aqueles dados específicos**, incluindo o ruído, e não generaliza.
+
+**Proporção comum.** 80/20 ou 70/30. Usamos 80/20.
+
+**Snippet.**
+
+```python
+# repo/notebooks/05_modelagem_regressao.ipynb
+from sklearn.model_selection import train_test_split
+
+X_treino, X_teste, y_treino, y_teste = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,  # semente fixa para reprodutibilidade
+)
+```
+
+**Por que random_state=42.** Convenção da comunidade (referência ao livro "Guia do Mochileiro das Galáxias", onde 42 é "a resposta para a vida, o universo e tudo mais"). Qualquer número fixo funcionaria — o importante é **fixar** para que o split seja sempre o mesmo entre execuções.
+
+**Cuidados.**
+- Para classificação com classes desbalanceadas, use `stratify=y` para preservar a proporção em ambos os conjuntos.
+- Para séries temporais, **nunca** faça split aleatório — use split temporal (treino antigo, teste recente).
+- Veja **data leakage** (seção 39).
+
+---
+
+## 35. Validação cruzada (k-fold)
+
+**O que é.** Generalização do train/test split. Em vez de dividir uma vez (80/20), você divide o dataset em **k pedaços** e faz k rodadas:
+- Rodada 1: pedaço 1 é teste, resto é treino. Treina e avalia.
+- Rodada 2: pedaço 2 é teste, resto é treino. Treina e avalia.
+- ...
+- Rodada k: pedaço k é teste, resto é treino. Treina e avalia.
+
+A métrica final é a **média das k avaliações**.
+
+**Analogia.** Em vez de fazer só uma prova, você faz k provas, cada uma cobrindo uma parte diferente da matéria. A média te diz como você sabe a matéria como um todo, e o desvio te diz se você é consistente ou não.
+
+**Por que importa.**
+- Dá estimativa mais robusta do desempenho do modelo.
+- Reduz dependência do random_state específico do split.
+
+**k mais comum.** k = 5 ou k = 10.
+
+**Por que NÃO usamos no projeto.** Train/test simples já mostrou que o modelo generaliza (R² próximo entre treino e teste). Para um modelo simples e dataset moderado, a sofisticação extra do k-fold não acrescenta muito.
+
+**Snippet (referência).**
+
+```python
+from sklearn.model_selection import cross_val_score
+
+scores = cross_val_score(
+    modelo,
+    X, y,
+    cv=5,             # k = 5 pedaços
+    scoring="r2",
+)
+print(f"R² médio: {scores.mean():.3f} ± {scores.std():.3f}")
+```
+
+**Cuidados.**
+- k-fold custa k vezes mais computação que train/test simples.
+- Para datasets pequenos (n < 100), prefira **leave-one-out** (k = n).
+
+---
+
+## 36. Overfitting e underfitting
+
+### Overfitting
+
+**O que é.** Modelo aprende demais o **ruído específico** do treino, não o padrão geral. Performa muito bem no treino, mal no teste.
+
+**Sintomas.**
+- R² alto no treino, R² baixo no teste.
+- Modelo muito complexo (muitas variáveis, muitos parâmetros).
+
+**Analogia.** Aluno que decora as respostas da lista mas não entende a matéria. Tira 10 na lista, tira 3 na prova diferente.
+
+### Underfitting
+
+**O que é.** Modelo é simples demais para capturar o padrão. Performa mal em treino e teste.
+
+**Sintomas.**
+- R² baixo em ambos.
+- Modelo muito simples (poucas variáveis, baixa capacidade).
+
+**Analogia.** Aluno que estudou pouco. Tira 3 em qualquer lugar.
+
+**No nosso projeto.** R² treino ≈ 0,38 e R² teste ≈ 0,40 — praticamente iguais. Não há overfitting (modelo simples demais para overfittar). Pode haver leve underfitting (uma multivariada com mais variáveis chegou a R² = 0,56 no notebook 04). Mas o trade-off de complexidade não vale a pena para o objetivo do projeto.
+
+**Soluções para overfitting.**
+- Reduzir complexidade (menos variáveis, modelo mais simples).
+- Regularização (L1, L2 — penalizam coeficientes grandes).
+- Mais dados de treino.
+- Validação cruzada para detectar.
+
+**Soluções para underfitting.**
+- Aumentar complexidade (mais variáveis, modelo mais sofisticado).
+- Adicionar interações, transformações não-lineares.
+
+---
+
+## 37. Feature engineering vs feature selection
+
+### Feature engineering
+
+**O que é.** Criar novas variáveis a partir das existentes, baseado em conhecimento do domínio.
+
+**Exemplos.**
+- Combinar duas colunas: `valor_por_item = order_value / items_quantity`.
+- Aplicar transformação: `log_order_value = log(1 + order_value)`.
+- Extrair de data: `mes_compra` a partir de `data_pedido`.
+- Categorizar: `faixa_atraso` a partir de `delivery_delay_days`.
+
+**No nosso projeto.** No notebook 03 (`features.py`):
+
+```python
+# Categorizacao da target
+dados["categoria_nps"] = pd.cut(...)
+
+# Transformacao log para reduzir assimetria
+dados["log_order_value"] = np.log1p(dados["order_value"])
+```
+
+### Feature selection
+
+**O que é.** Escolher **quais** das variáveis disponíveis usar no modelo.
+
+**Métodos.**
+- **Filtros:** correlação com target, variância, qui-quadrado. Rápido, ignora interações.
+- **Wrappers:** treina modelo com subconjuntos diferentes. Caro, mas considera interações.
+- **Embedded:** o modelo escolhe sozinho durante o treinamento (LASSO, árvores).
+
+**No nosso projeto.** Usamos **seleção por hipótese**: cada variável só entra no modelo se passar em um teste estatístico no notebook 04. Resultado: usamos só `delivery_delay_days`.
+
+**Diferença.** Engineering **cria** features. Selection **escolhe** features. Engineering vem antes; selection depois.
+
+---
+
+## 38. Pipelines do sklearn
+
+**O que é.** Estrutura do sklearn que encadeia múltiplos passos de transformação + modelagem em um único objeto.
+
+**Por que importa.**
+- Garante que **mesmas transformações** sejam aplicadas em treino e teste.
+- Evita data leakage (seção 39) por aplicar transformações **dentro** do split de validação.
+- Facilita serialização e deploy.
+
+**Exemplo (referência, não usamos no projeto).**
+
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
+
+pipeline = Pipeline([
+    ("scaler", StandardScaler()),       # passo 1: padroniza
+    ("modelo", LinearRegression()),     # passo 2: modela
+])
+
+pipeline.fit(X_treino, y_treino)        # treina os dois passos juntos
+pipeline.predict(X_teste)               # aplica os dois passos no teste
+```
+
+**Por que NÃO usamos.** Modelo simples (1 variável, sem pré-processamento). Pipeline seria overkill. Em projetos com muitas transformações, pipeline é essencial.
+
+---
+
+## 39. Data leakage
+
+**O que é.** Quando informação do **teste** vaza para o **treino** durante o pipeline, inflando artificialmente o desempenho.
+
+**Exemplos clássicos.**
+- Calcular média/desvio para padronização **antes** do split. A média do dataset inteiro inclui o teste, então o treino "viu" o teste.
+- Usar variáveis que só existem **depois** do evento que você quer prever. Ex.: prever churn usando "data de cancelamento".
+- Duplicatas entre treino e teste.
+
+**Como evitar.**
+- Sempre faça split **primeiro**, depois pré-processe.
+- Use Pipeline do sklearn (seção 38).
+- Reflita sobre o **timing** das variáveis: estavam disponíveis no momento da decisão?
+
+**No nosso projeto.** A target `categoria_nps` é derivada de `nps_score`. Se você incluísse `nps_score` como preditor, seria leakage perfeito (modelo "preveria" a categoria com 100% de acurácia, porque está prevendo algo derivado do próprio preditor). Por isso, no notebook 06, X só inclui `delivery_delay_days`.
+
+**Cuidados.**
+- Leakage é silencioso. Resultado parece bom, mas o modelo falha em produção.
+- Em séries temporais, leakage é especialmente comum — sempre confira se preditor está disponível **antes** do evento.
+
+---
+
+---
+
+# Parte VII — Ecossistema Python e reprodutibilidade
+
 
 
 ---

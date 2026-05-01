@@ -1630,8 +1630,356 @@ pipeline.predict(X_teste)               # aplica os dois passos no teste
 
 # Parte VII — Ecossistema Python e reprodutibilidade
 
+## 40. Pandas — operações que usamos
 
+**O que é.** Biblioteca Python para manipulação de dados tabulares, criada por Wes McKinney em 2008. O nome vem de "panel data" (dados em painel, da econometria).
+
+**Estruturas principais.**
+- **Series:** vetor 1D com índice. Tipo `pd.Series`.
+- **DataFrame:** tabela 2D com índice e colunas. Tipo `pd.DataFrame`.
+
+### 40.1. Leitura
+
+```python
+dados = pd.read_csv("data/raw/desafio_nps_fase_1.csv")
+dados.head()        # primeiras 5 linhas
+dados.info()        # tipos e missing
+dados.describe()    # estatisticas descritivas
+```
+
+### 40.2. Seleção
+
+```python
+dados["nps_score"]                   # uma coluna (Series)
+dados[["nps_score", "order_value"]]  # multiplas colunas (DataFrame)
+dados.loc[dados["nps_score"] < 7]    # filtro por condicao (linhas)
+dados.iloc[0:10]                     # por posicao (linhas 0 a 9)
+```
+
+### 40.3. groupby
+
+**O que faz.** Divide o DataFrame em grupos baseado em uma coluna, aplica uma função em cada grupo, combina os resultados (split-apply-combine).
+
+```python
+dados.groupby("categoria_nps")["nps_score"].mean()
+# detrator     3.21
+# neutro       7.45
+# promotor     9.62
+```
+
+### 40.4. merge
+
+**O que faz.** Une dois DataFrames baseado em colunas em comum (igual ao `JOIN` do SQL).
+
+```python
+resultado = pd.merge(df1, df2, on="customer_id", how="left")
+# how: 'inner' (so coincidencias), 'left', 'right', 'outer' (tudo)
+```
+
+### 40.5. cut
+
+**O que faz.** Discretiza uma coluna contínua em faixas (binning).
+
+```python
+faixa = pd.cut(
+    dados["delivery_delay_days"],
+    bins=[-0.5, 0.5, 2.5, 4.5, 100],
+    labels=["sem", "leve", "moderado", "severo"],
+)
+```
+
+### 40.6. Categorical ordenado
+
+```python
+pd.Categorical(
+    dados["categoria_nps"],
+    categories=["detrator", "neutro", "promotor"],
+    ordered=True,
+)
+# Permite comparacoes <, > e ordena corretamente
+```
+
+**Cuidados.**
+- `dados["coluna"].apply(funcao)` é versátil mas lento. Para operações simples, use vetorização (seção 41).
+- `inplace=True` está sendo desencorajado em pandas moderno. Prefira `dados = dados.assign(...)` ou simples atribuição.
 
 ---
 
-*Caderno em construção. Demais seções do índice serão preenchidas conforme o estudo avança.*
+## 41. NumPy e vetorização
+
+**O que é.** Biblioteca de arrays numéricos otimizada (C por baixo). Base do pandas, scipy, sklearn — todo o ecossistema científico Python depende dela.
+
+**Vetorização.** Operação aplicada a array inteiro **de uma vez**, sem loop Python.
+
+**Comparação.**
+
+```python
+# Forma lenta (loop Python): O(n) com overhead de cada iteracao
+resultado = []
+for x in dados["nps_score"]:
+    resultado.append(x ** 2)
+
+# Forma rapida (vetorizada): C interno, ~50-100x mais rapido
+resultado = dados["nps_score"] ** 2
+```
+
+**Por que é mais rápido.**
+- Loops Python têm overhead de dispatch (descobrir tipo a cada iteração).
+- NumPy executa em C com tipos fixos.
+- Operações vetorizadas usam SIMD (instruções de processador que processam várias coisas em paralelo).
+
+**No nosso projeto.**
+
+```python
+# Calcular residuos (operacao vetorizada)
+residuos = y_teste - y_pred_teste
+
+# Mascara booleana (vetorizada)
+detratores_mask = dados["nps_score"] < 7
+
+# np.linspace para criar grade fina
+grade_atraso = np.linspace(0, 7, 100)
+```
+
+**Cuidados.**
+- Sempre prefira vetorização sobre loops.
+- Quando você precisar mesmo iterar, considere `dados.itertuples()` (mais rápido que `iterrows()`).
+
+---
+
+## 42. Matplotlib + Seaborn
+
+### Matplotlib
+
+**O que é.** Biblioteca de plotagem de baixo nível. Total controle, verbosidade alta.
+
+**Anatomia.**
+
+```
+Figure                       <- a "imagem" inteira (uma janela ou arquivo)
+└── Axes (= subplot)         <- area de plot dentro da figure
+    ├── Linhas/barras        <- os dados
+    ├── Eixos x e y          <- escala, ticks, labels
+    └── Title, legend, etc.
+```
+
+```python
+fig, ax = plt.subplots(figsize=(10, 6))     # cria figure + axes
+ax.plot(x, y, color="red")                  # plota
+ax.set_xlabel("Atraso")
+ax.set_ylabel("NPS")
+ax.set_title("Relacao entre atraso e NPS")
+plt.savefig("figura.png", dpi=120, bbox_inches="tight")
+```
+
+### Seaborn
+
+**O que é.** Camada em cima do matplotlib, focada em **plots estatísticos**. Sintaxe mais curta para gráficos comuns.
+
+**Vantagens.**
+- Tema visual mais bonito por padrão.
+- Funções como `regplot`, `boxplot`, `kdeplot`, `heatmap` pré-prontas.
+- Aceita DataFrames com `data=` e nomes de colunas.
+
+```python
+sns.set_theme(style="whitegrid", context="notebook")
+sns.regplot(data=dados, x="delivery_delay_days", y="nps_score")
+```
+
+**Quando usar qual.**
+- **Seaborn** para EDA rápida (gráficos estatísticos comuns).
+- **Matplotlib** quando precisa de controle fino (gráficos para slides, anotações, customização específica).
+
+**No nosso projeto.** Usamos os dois. Para customizações finas (linhas anotadas, paletas semânticas) caímos no matplotlib direto.
+
+---
+
+## 43. statsmodels vs scikit-learn
+
+Duas bibliotecas que parecem fazer a mesma coisa, mas têm filosofias diferentes.
+
+### statsmodels
+
+**Filosofia.** Estatística clássica, foco em **inferência**.
+
+**Pontos fortes:**
+- Tabelas detalhadas com p-valor, IC, std error.
+- Sintaxe de fórmula tipo R: `"y ~ x1 + x2"`.
+- Testes estatísticos (Welch, Wilson, etc.).
+
+**No nosso projeto.** Usamos para:
+- Ajustar regressão e ler `summary()` no notebook 05.
+- Testes de proporção no notebook 04.
+
+### scikit-learn
+
+**Filosofia.** Machine learning, foco em **previsão**.
+
+**Pontos fortes:**
+- API uniforme: todo modelo tem `.fit()`, `.predict()`, `.score()`.
+- Pipeline, cross-validation, métricas.
+- Algoritmos modernos (árvores, ensembles, redes).
+
+**No nosso projeto.** Usamos para:
+- `train_test_split` (notebook 05).
+- Métricas (`accuracy_score`, `f1_score`, `confusion_matrix`) no notebook 06.
+
+**Quando usar qual.**
+- **statsmodels** se você quer entender **por que** o modelo prediz o que prediz (interpretação, p-valor, IC).
+- **sklearn** se você quer prever **o melhor possível** (dados grandes, pipeline, deploy).
+
+**No projeto, usamos os dois pelo melhor dos dois mundos.**
+
+---
+
+## 44. Jupyter Notebook por dentro
+
+**O que é.** Ambiente de programação onde código + texto + imagens + outputs convivem num único arquivo `.ipynb`.
+
+**Componentes.**
+- **Kernel:** processo Python que executa o código. Vive em background, mantém estado entre células.
+- **Célula:** unidade de código ou markdown.
+- **Output:** resultado da célula (texto, gráfico, tabela). Fica salvo no `.ipynb`.
+
+**Estrutura do .ipynb.** É um JSON. Cada célula é um objeto com tipo, source, outputs.
+
+**Pegadinhas comuns.**
+- **Ordem de execução não é a ordem visual.** Você pode rodar a célula 5 antes da célula 3 e o estado fica confuso. Sempre clique em "Restart & Run All" antes de fechar.
+- **Variáveis ficam na memória do kernel.** Apagou uma célula? A variável dela ainda existe até reiniciar o kernel.
+- **Outputs ficam serializados.** Se você roda um plot e fecha sem salvar, o plot some. Salve o notebook com outputs antes de fechar.
+
+**Boa prática (que seguimos).**
+- Notebooks numerados na ordem CRISP-DM.
+- Cada notebook é autônomo: começa carregando dados via função do `src/nps/data.py`, sem depender de estado de outro notebook.
+- Cada notebook é executável de cima a baixo via `Restart & Run All`.
+
+---
+
+## 45. Reprodutibilidade — seeds, locks e versionamento
+
+### Sementes (random_state)
+
+**O que é.** Operações aleatórias (split, embaralhamento, sampling) usam um gerador pseudo-aleatório. Definindo a "semente" inicial, você garante que toda execução produz **exatamente** o mesmo resultado.
+
+**No nosso projeto.**
+
+```python
+SEMENTE_ALEATORIA = 42
+np.random.seed(SEMENTE_ALEATORIA)
+
+X_treino, X_teste, y_treino, y_teste = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=SEMENTE_ALEATORIA,
+)
+```
+
+### Lock files
+
+**O que é.** Arquivo gerado pelo gerenciador de pacotes que registra **a versão exata** de cada dependência (incluindo dependências transitivas).
+
+**No nosso projeto.** O `uv` gera `uv.lock` automaticamente. Isso garante que outra pessoa que clone o repo e rode `uv sync` vai instalar **exatamente** as mesmas versões que você está usando.
+
+**Por que importa.** Versão diferente de pandas (digamos 2.0 vs 2.2) pode mudar comportamento sutil. Sem lock, "funciona na minha máquina" vira a regra.
+
+### Versionamento de código vs dados
+
+**Código:** sempre em git. Toda mudança rastreável.
+
+**Dados:** mais nuançado. Convenção do Cookiecutter Data Science (que adotamos):
+- `data/raw/` — versionado (fonte original, imutável).
+- `data/interim/`, `data/processed/` — geralmente NÃO versionados (gerados a partir do raw, podem ser grandes).
+- **Exceção:** o dataset processado canônico (`dados_processados.csv`) versionado para permitir partir do notebook 04 sem rodar a preparação.
+
+**Configuração no `.gitignore`.**
+
+```
+data/interim/*
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/dados_processados.csv  # excecao
+```
+
+---
+
+## 46. CRISP-DM e Cookiecutter Data Science
+
+> **Acrônimos.**
+> - **CRISP-DM** = *Cross-Industry Standard Process for Data Mining* (processo padrão multi-indústria para mineração de dados). Criado em 1996, ainda é a metodologia mais usada.
+> - **DS** = *Data Science* (ciência de dados).
+
+### CRISP-DM — as 6 fases
+
+1. **Business Understanding.** Entender a dor do negócio, traduzir para problema de dados. Notebook 01.
+2. **Data Understanding.** Conhecer a base, qualidade dos dados, definição da target. Notebook 02.
+3. **Data Preparation.** Limpeza, transformação, criação de features. Notebook 03.
+4. **Modeling.** Escolher e treinar modelos. Notebooks 05 e 06 (no projeto, EDA do notebook 04 também alimenta isso).
+5. **Evaluation.** Avaliar técnica + negócio. Conclusões dos notebooks 05 e 06.
+6. **Deployment.** Entregar para o negócio. Slides + vídeo.
+
+**Por que CRISP-DM.**
+- Iterativo (você volta às fases anteriores conforme aprende).
+- Foco em negócio, não só em técnica.
+- Padrão da indústria — qualquer DS no mundo entende a estrutura.
+
+### Cookiecutter Data Science
+
+**O que é.** Template de pasta padrão para projetos de DS. Mantido pela DrivenData.
+
+**Estrutura que adotamos:**
+
+```
+.
+├── data/                # raw, interim, processed, external
+├── notebooks/           # numerados por fase CRISP-DM
+├── src/nps/             # codigo reutilizavel (funcoes, classes)
+├── tests/               # testes unitarios
+├── models/              # modelos serializados
+├── reports/figures/     # imagens
+├── reports/slides/      # apresentacao
+├── docs/                # dicionario de dados, etc.
+├── pyproject.toml       # dependencias
+└── README.md
+```
+
+**Por que importa.**
+- **Convenção sobre configuração:** qualquer DS reconhece a estrutura.
+- **Separação clara entre código (`src/`) e exploração (`notebooks/`).** Notebooks não são código de produção.
+- **Reprodutibilidade:** com `uv sync` + `Restart & Run All` em cada notebook na ordem, qualquer um reproduz o trabalho.
+
+**Cuidados.**
+- Não force a estrutura se ela não fizer sentido (projetos pequenos podem dispensar `tests/`, `external/`).
+- A estrutura é guia, não cárcere.
+
+---
+
+---
+
+# Apêndice — Cheat sheet rápido
+
+## Quando usar qual ferramenta
+
+| Quero... | Use |
+|---|---|
+| Resumir uma coluna | `dados["x"].describe()` |
+| Histograma | `ax.hist()` ou `sns.histplot()` |
+| Comparar grupos visualmente | `sns.boxplot()` |
+| Correlação entre numéricas | `dados.corr()` |
+| Comparar médias de 2 grupos | `scipy.stats.ttest_ind(equal_var=False)` |
+| IC para proporção | `statsmodels.stats.proportion.proportion_confint(method="wilson")` |
+| Comparar 2 proporções | `statsmodels.stats.proportion.proportions_ztest` |
+| Regressão (com p-valor e IC) | `statsmodels.formula.api.ols` |
+| Regressão (para previsão) | `sklearn.linear_model.LinearRegression` |
+| Split treino/teste | `sklearn.model_selection.train_test_split` |
+| Métricas de classificação | `sklearn.metrics.{accuracy,precision,recall,f1}_score` |
+
+## Ordem de leitura sugerida quando bater dúvida
+
+1. Conceito não está claro? Releia a seção aqui.
+2. Ainda confuso? StatQuest no YouTube (ver `referencias_estudo.md`).
+3. Aprofundamento? Capítulo do livro recomendado para o tópico.
+4. Como aplicar em código? Volte aos notebooks do `repo/`.
+
+---
+
+**Documento vivo.** Conforme você aprender mais, adicione aqui suas próprias analogias, dúvidas resolvidas e snippets que funcionaram. Este arquivo é seu — não está versionado no `repo/`, não vai para a banca, é só pra você.
